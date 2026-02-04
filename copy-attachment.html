@@ -50,8 +50,6 @@
     let docToken = null;
     let docBaseUrl = null;
 
-    // CONFIGURATION: This tells Grist to show a column picker in the side panel.
-    // The user will map their actual column (e.g., "Foto") to 'MyImageColumn'.
     grist.ready({
       columns: [
         { name: "MyImageColumn", title: "Select Image Column", type: "Attachments" }
@@ -59,66 +57,85 @@
       requiredAccess: 'full'
     });
 
-    // 1. Get access token for downloading private attachments
     grist.docApi.getAccessToken({ readOnly: true }).then(result => {
       docToken = result.token;
       docBaseUrl = result.baseUrl;
     });
 
-    // 2. Watch for record changes (when user clicks a row in the main table)
     grist.onRecord(function(record, mappings) {
-      // 'mappings' translates our internal name 'MyImageColumn' to the user's actual column ID
-      // If the mapping is missing or invalid, record data might be undefined
       if (!mappings || !mappings.MyImageColumn) return;
-
       const files = record[mappings.MyImageColumn];
       const btn = document.getElementById('copyBtn');
 
       if (files && files.length > 0) {
-        // Attachment found
-        attachmentId = files[0]; // Take the first file ID
+        attachmentId = files[0];
         btn.disabled = false;
-        btn.innerHTML = "📋 Copy Image to Clipboard";
+        btn.innerHTML = "📋 Copy Image";
       } else {
-        // No attachment in this cell
         attachmentId = null;
         btn.disabled = true;
         btn.innerHTML = "No Image Found";
       }
-
-      // Clear status message on new selection
       document.getElementById('status').innerText = "";
     });
 
-    // 3. Handle button click
+    // Function to convert Blob to PNG Blob using Canvas
+    async function convertToPng(blob) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(blob);
+
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+
+          canvas.toBlob((pngBlob) => {
+            URL.revokeObjectURL(url);
+            if (pngBlob) resolve(pngBlob);
+            else reject(new Error("Canvas conversion failed"));
+          }, 'image/png');
+        };
+
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Image load failed"));
+        };
+
+        img.src = url;
+      });
+    }
+
     document.getElementById('copyBtn').onclick = async function() {
       if (!attachmentId || !docToken) return;
       const statusEl = document.getElementById('status');
 
       try {
-        statusEl.innerText = "Downloading...";
+        statusEl.innerText = "Downloading & Converting...";
 
-        // Construct secure download URL
         const url = `${docBaseUrl}/attachments/${attachmentId}/download?auth=${docToken}`;
-
-        // Fetch image data as a Blob
         const response = await fetch(url);
         if (!response.ok) throw new Error("Download failed");
 
-        const blob = await response.blob();
+        let blob = await response.blob();
 
-        // Write Blob to system clipboard
-        // Note: This requires the widget to be served over HTTPS (standard in Grist)
-        await navigator.clipboard.write([
-          new ClipboardItem({ [blob.type]: blob })
-        ]);
+        // If it is NOT a PNG (e.g. JPEG), convert it!
+        if (blob.type !== 'image/png') {
+            blob = await convertToPng(blob);
+        }
+
+        // Now we can safely write 'image/png' to clipboard
+        const item = new ClipboardItem({ "image/png": blob });
+        await navigator.clipboard.write([item]);
 
         statusEl.innerText = "✅ Copied!";
         setTimeout(() => statusEl.innerText = "", 2000);
 
       } catch (err) {
         console.error(err);
-        statusEl.innerText = "❌ Error (Check Console)";
+        statusEl.innerText = "❌ Error: " + err.message;
       }
     };
   </script>
