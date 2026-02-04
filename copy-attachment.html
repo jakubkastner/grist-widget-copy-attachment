@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background-color: transparent;
+    }
+    .btn {
+      background-color: #169BD7;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      width: 100%;
+      max-width: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .btn:hover { background-color: #1178a8; }
+    .btn:disabled { background-color: #ccc; cursor: not-allowed; box-shadow: none; }
+    #status { margin-top: 8px; font-size: 12px; height: 16px; color: #333; }
+  </style>
+</head>
+<body>
+
+  <button id="copyBtn" class="btn" disabled>
+    <span>Select a record...</span>
+  </button>
+
+  <div id="status"></div>
+
+  <script>
+    let attachmentId = null;
+    let docToken = null;
+    let docBaseUrl = null;
+
+    // CONFIGURATION: This tells Grist to show a column picker in the side panel.
+    // The user will map their actual column (e.g., "Foto") to 'MyImageColumn'.
+    grist.ready({
+      columns: [
+        { name: "MyImageColumn", title: "Select Image Column", type: "Attachments" }
+      ],
+      requiredAccess: 'full'
+    });
+
+    // 1. Get access token for downloading private attachments
+    grist.docApi.getAccessToken({ readOnly: true }).then(result => {
+      docToken = result.token;
+      docBaseUrl = result.baseUrl;
+    });
+
+    // 2. Watch for record changes (when user clicks a row in the main table)
+    grist.onRecord(function(record, mappings) {
+      // 'mappings' translates our internal name 'MyImageColumn' to the user's actual column ID
+      // If the mapping is missing or invalid, record data might be undefined
+      if (!mappings || !mappings.MyImageColumn) return;
+
+      const files = record[mappings.MyImageColumn];
+      const btn = document.getElementById('copyBtn');
+
+      if (files && files.length > 0) {
+        // Attachment found
+        attachmentId = files[0]; // Take the first file ID
+        btn.disabled = false;
+        btn.innerHTML = "📋 Copy Image to Clipboard";
+      } else {
+        // No attachment in this cell
+        attachmentId = null;
+        btn.disabled = true;
+        btn.innerHTML = "No Image Found";
+      }
+
+      // Clear status message on new selection
+      document.getElementById('status').innerText = "";
+    });
+
+    // 3. Handle button click
+    document.getElementById('copyBtn').onclick = async function() {
+      if (!attachmentId || !docToken) return;
+      const statusEl = document.getElementById('status');
+
+      try {
+        statusEl.innerText = "Downloading...";
+
+        // Construct secure download URL
+        const url = `${docBaseUrl}/attachments/${attachmentId}/download?auth=${docToken}`;
+
+        // Fetch image data as a Blob
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Download failed");
+
+        const blob = await response.blob();
+
+        // Write Blob to system clipboard
+        // Note: This requires the widget to be served over HTTPS (standard in Grist)
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob })
+        ]);
+
+        statusEl.innerText = "✅ Copied!";
+        setTimeout(() => statusEl.innerText = "", 2000);
+
+      } catch (err) {
+        console.error(err);
+        statusEl.innerText = "❌ Error (Check Console)";
+      }
+    };
+  </script>
+</body>
+</html>
