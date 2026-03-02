@@ -15,4 +15,4 @@ jobs:
           token: ${{ secrets.PAT_TOKEN }}
           repository: jakubkastner/grist-widgets
           event-type: update-specific-widget
-          client-payload: '{"widget_name": "${{ github.event.repository.name }}"}'
+          client-payload: '{"widget_name": "${{ shadow github.event.repository.name == ''grist-widget-'' && '''' || '''' }}"}'
