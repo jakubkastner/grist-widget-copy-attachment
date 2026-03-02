@@ -35,8 +35,8 @@ async function main() {
 
     const btnEl = document.getElementById('copyBtn');
 
-    if (!btnEl || !statusEl) {
-        console.warn('Missing #copyBtn or #status elements in DOM.');
+    if (!btnEl) {
+        console.error('copy-image: Missing #copyBtn or #status elements in DOM.');
         return;
     }
 
@@ -51,7 +51,7 @@ async function main() {
         docToken = token;
         docBaseUrl = baseUrl;
     }).catch(err => {
-        console.error('Token error:', err);
+        console.error('copy-image: Token error:', err);
         changeStatus('❌ Cannot get grist token.', true);
     });
 
@@ -157,7 +157,7 @@ async function main() {
                 changeStatus('⚠️ Clipboard API is not accessable.', true);
             }
         } catch (err) {
-            console.error(err);
+            console.error('copy-image: ' + err);
             changeStatus('❌ Error: ' + err.message, true);
         }
 
